@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Lagekarte Einsatzleitung</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #172333;
+    }
+
+    #app {
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+    }
+
+    /* =========================
+       LINKE SEITE – LAGEKARTE
+       ========================= */
+
+    #mapArea {
+        position: relative;
+        width: 78%;
+        height: 100%;
+        background: #222;
+        overflow: hidden;
+        user-select: none;
+    }
+
+    #map {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        pointer-events: none;
+    }
+
+    #objectLayer {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+    }
+
+    /* =========================
+       RECHTE SEITE
+       ========================= */
+
+    #sidebar {
+        width: 22%;
+        height: 100%;
+        background: #f4f6f8;
+        border-left: 4px solid #172333;
+        overflow-y: auto;
+        padding: 14px;
+    }
+
+    #sidebar h1 {
+        font-size: 22px;
+        margin: 0 0 15px 0;
+        color: #172333;
+    }
+
+    .group {
+        margin-bottom: 20px;
+    }
+
+    .group-title {
+        font-size: 14px;
+        font-weight: bold;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #cbd5e1;
+        padding-bottom: 5px;
+    }
+
+    .vehicle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: white;
+        border: 1px solid #d6dce2;
+        border-radius: 8px;
+        padding: 7px;
+        margin-bottom: 7px;
+        cursor: grab;
+        transition: background 0.15s;
+    }
+
+    .vehicle:hover {
+        background: #eaf2f8;
+    }
+
+    .vehicle img {
+        width: 75px;
+        height: 45px;
+        object-fit: contain;
+        pointer-events: none;
+    }
+
+    .vehicle span {
+        font-weight: bold;
+        font-size: 14px;
+        color: #172333;
+    }
+
+    /* =========================
+       FAHRZEUGE AUF DER KARTE
+       ========================= */
+
+    .map-object {
+        position: absolute;
+        width: 90px;
+        cursor: move;
+        touch-action: none;
+        transform-origin: center;
+    }
+
+    .map-object.selected {
+        outline: 3px solid #ffd400;
+        outline-offset: 4px;
+        border-radius: 4px;
+    }
+
+    .map-object img {
+        width: 100%;
+        height: auto;
+        display: block;
+        pointer-events: none;
+    }
+
+    /* =========================
+       BEDIENLEISTE
+       ========================= */
+
+    #toolbar {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 1000;
+
+        display: flex;
+        gap: 6px;
+
+        background: rgba(20, 30, 40, 0.92);
+        padding: 8px;
+        border-radius: 12px;
+
+        box-shadow: 0 4px 18px rgba(0,0,0,.35);
+    }
+
+    #toolbar button {
+        border: none;
+        border-radius: 7px;
+        padding: 9px 13px;
+        background: white;
+        color: #172333;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    #toolbar button:hover {
+        background: #dbeafe;
+    }
+
+    #toolbar .delete {
+        background: #b91c1c;
+        color: white;
+    }
+
+    #toolbar .reset {
+        background: #334155;
+        color: white;
+    }
+
+    #hint {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 500;
+
+        background: rgba(255,255,255,.90);
+        padding: 7px 11px;
+        border-radius: 7px;
+
+        font-size: 13px;
+        color: #172333;
+
+        pointer-events: none;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+    <!-- =====================
+         LAGEKARTE
+         ===================== -->
+
+    <div id="mapArea">
+
+        <img id="map" src="Lagekarte.png" alt="Lagekarte">
+
+        <div id="objectLayer"></div>
+
+        <div id="hint">
+            Fahrzeug rechts auswählen und auf die Lagekarte ziehen
+        </div>
+
+        <div id="toolbar">
+            <button id="rotateLeft">↶ 15°</button>
+            <button id="rotateRight">↷ 15°</button>
+            <button id="smaller">−</button>
+            <button id="bigger">+</button>
+            <button id="delete" class="delete">Löschen</button>
+            <button id="reset" class="reset">Lage zurücksetzen</button>
+        </div>
+
+    </div>
+
+
+    <!-- =====================
+         FAHRZEUGLEISTE
+         ===================== -->
+
+    <aside id="sidebar">
+
+        <h1>Fahrzeuge</h1>
+
+        <div class="group">
+            <div class="group-title">Rettungsdienst</div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/RTW.png">
+                <img src="Fahrzeuge/RTW.png">
+                <span>RTW</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/KTW.png">
+                <img src="Fahrzeuge/KTW.png">
+                <span>KTW</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/NEF.png">
+                <img src="Fahrzeuge/NEF.png">
+                <span>NEF</span>
+            </div>
+        </div>
+
+
+        <div class="group">
+            <div class="group-title">Feuerwehr</div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/HLF20.png">
+                <img src="Fahrzeuge/HLF20.png">
+                <span>HLF 20</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/LF20.png">
+                <img src="Fahrzeuge/LF20.png">
+                <span>LF 20</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/Drehleiter.png">
+                <img src="Fahrzeuge/Drehleiter.png">
+                <span>Drehleiter</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/GW-L.png">
+                <img src="Fahrzeuge/GW-L.png">
+                <span>GW-L</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/ELW_FFW.png">
+                <img src="Fahrzeuge/ELW_FFW.png">
+                <span>ELW</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/MZF.png">
+                <img src="Fahrzeuge/MZF.png">
+                <span>MZF</span>
+            </div>
+        </div>
+
+
+        <div class="group">
+            <div class="group-title">Polizei</div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/POL.png">
+                <img src="Fahrzeuge/POL.png">
+                <span>Polizei</span>
+            </div>
+        </div>
+
+
+        <div class="group">
+            <div class="group-title">Luftrettung</div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/ADAC.png">
+                <img src="Fahrzeuge/ADAC.png">
+                <span>RTH ADAC</span>
+            </div>
+
+            <div class="vehicle" draggable="true"
+                 data-src="Fahrzeuge/DRF.png">
+                <img src="Fahrzeuge/DRF.png">
+                <span>RTH DRF</span>
+            </div>
+
+        </div>
+
+    </aside>
+
+</div>
+
+
+<script>
+const mapArea = document.getElementById("mapArea");
+const layer = document.getElementById("objectLayer");
+
+let selected = null;
+let dragSrc = null;
+
+
+/* ==============================
+   FAHRZEUG AUS SIDEBAR ZIEHEN
+   ============================== */
+
+document.querySelectorAll(".vehicle").forEach(vehicle => {
+
+    vehicle.addEventListener("dragstart", e => {
+        dragSrc = vehicle.dataset.src;
+        e.dataTransfer.setData("text/plain", dragSrc);
+        e.dataTransfer.effectAllowed = "copy";
+    });
+
+});
+
+
+mapArea.addEventListener("dragover", e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+});
+
+
+mapArea.addEventListener("drop", e => {
+
+    e.preventDefault();
+
+    const src =
+        e.dataTransfer.getData("text/plain") || dragSrc;
+
+    if (!src) return;
+
+    const rect = mapArea.getBoundingClientRect();
+
+    createObject(
+        src,
+        e.clientX - rect.left,
+        e.clientY - rect.top
+    );
+
+});
+
+
+/* ==============================
+   OBJEKT ERZEUGEN
+   ============================== */
+
+function createObject(src, x, y) {
+
+    const obj = document.createElement("div");
+
+    obj.className = "map-object";
+
+    obj.dataset.rotation = "0";
+    obj.dataset.size = "90";
+
+    obj.style.width = "90px";
+
+    obj.style.left = (x - 45) + "px";
+    obj.style.top = (y - 25) + "px";
+
+    const img = document.createElement("img");
+    img.src = src;
+
+    obj.appendChild(img);
+    layer.appendChild(obj);
+
+    makeMovable(obj);
+
+    selectObject(obj);
+}
+
+
+/* ==============================
+   OBJEKT AUF KARTE BEWEGEN
+   ============================== */
+
+function makeMovable(obj) {
+
+    let moving = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    obj.addEventListener("pointerdown", e => {
+
+        e.preventDefault();
+
+        selectObject(obj);
+
+        moving = true;
+
+        const rect = obj.getBoundingClientRect();
+
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        obj.setPointerCapture(e.pointerId);
+    });
+
+
+    obj.addEventListener("pointermove", e => {
+
+        if (!moving) return;
+
+        const mapRect = mapArea.getBoundingClientRect();
+
+        let x =
+            e.clientX -
+            mapRect.left -
+            offsetX;
+
+        let y =
+            e.clientY -
+            mapRect.top -
+            offsetY;
+
+        const maxX =
+            mapArea.clientWidth -
+            obj.offsetWidth;
+
+        const maxY =
+            mapArea.clientHeight -
+            obj.offsetHeight;
+
+        x = Math.max(0, Math.min(x, maxX));
+        y = Math.max(0, Math.min(y, maxY));
+
+        obj.style.left = x + "px";
+        obj.style.top = y + "px";
+    });
+
+
+    obj.addEventListener("pointerup", e => {
+
+        moving = false;
+
+        try {
+            obj.releasePointerCapture(e.pointerId);
+        } catch {}
+
+    });
+
+}
+
+
+/* ==============================
+   AUSWAHL
+   ============================== */
+
+function selectObject(obj) {
+
+    if (selected) {
+        selected.classList.remove("selected");
+    }
+
+    selected = obj;
+
+    if (selected) {
+        selected.classList.add("selected");
+    }
+
+}
+
+
+/* ==============================
+   DREHEN
+   ============================== */
+
+function rotate(amount) {
+
+    if (!selected) return;
+
+    let rotation =
+        parseInt(selected.dataset.rotation || 0);
+
+    rotation += amount;
+
+    selected.dataset.rotation = rotation;
+
+    selected.style.transform =
+        `rotate(${rotation}deg)`;
+}
+
+
+document
+    .getElementById("rotateLeft")
+    .addEventListener("click", () => rotate(-15));
+
+
+document
+    .getElementById("rotateRight")
+    .addEventListener("click", () => rotate(15));
+
+
+/* ==============================
+   GRÖSSE
+   ============================== */
+
+document
+    .getElementById("bigger")
+    .addEventListener("click", () => {
+
+        if (!selected) return;
+
+        let size =
+            parseInt(selected.dataset.size || 90);
+
+        size = Math.min(250, size + 15);
+
+        selected.dataset.size = size;
+        selected.style.width = size + "px";
+
+    });
+
+
+document
+    .getElementById("smaller")
+    .addEventListener("click", () => {
+
+        if (!selected) return;
+
+        let size =
+            parseInt(selected.dataset.size || 90);
+
+        size = Math.max(35, size - 15);
+
+        selected.dataset.size = size;
+        selected.style.width = size + "px";
+
+    });
+
+
+/* ==============================
+   LÖSCHEN
+   ============================== */
+
+document
+    .getElementById("delete")
+    .addEventListener("click", () => {
+
+        if (!selected) return;
+
+        selected.remove();
+        selected = null;
+
+    });
+
+
+/* ==============================
+   ALLES ZURÜCKSETZEN
+   ============================== */
+
+document
+    .getElementById("reset")
+    .addEventListener("click", () => {
+
+        const answer =
+            confirm("Soll die komplette Lage zurückgesetzt werden?");
+
+        if (!answer) return;
+
+        layer.innerHTML = "";
+        selected = null;
+
+    });
+
+
+/* ==============================
+   LEEREN BEREICH ANKLICKEN
+   ============================== */
+
+mapArea.addEventListener("pointerdown", e => {
+
+    if (
+        e.target === mapArea ||
+        e.target.id === "objectLayer"
+    ) {
+
+        if (selected) {
+            selected.classList.remove("selected");
+        }
+
+        selected = null;
+    }
+
+});
+</script>
+
+</body>
+</html>
